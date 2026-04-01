@@ -13,19 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install flask pytest
+        run: |
+          cd myapp
+          pip install flask
 
       - name: Run tests
         run: |
-          echo "Running tests..."
+          cd myapp
           python -c "from app import app; print('✅ App imports OK')"
 
   build:
@@ -33,13 +35,12 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.build-image.outputs.image }}
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -47,7 +48,7 @@ jobs:
 
       - name: Login to ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build tag and push image
         id: build-image
@@ -55,36 +56,19 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG:    ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./myapp
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-            >> $GITHUB_OUTPUT
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
           echo "✅ Image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
-
-      - name: Deploy to K8s
+      - name: Deploy
         env:
           IMAGE: ${{ needs.build.outputs.image }}
         run: |
           echo "🚀 Deploying image: $IMAGE"
           echo "kubectl set image deployment/myapp myapp=$IMAGE"
           echo "✅ Deployment complete!"
-
-      - name: Notify success
-        if: success()
-        run: |
-          echo "✅ Pipeline complete!"
-          echo "Image: ${{ needs.build.outputs.image }}"

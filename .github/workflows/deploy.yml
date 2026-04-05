@@ -23,15 +23,37 @@ jobs:
       - name: Install dependencies
         run: |
           cd myapp
-          pip install flask
+          pip install flask prometheus-client
 
       - name: Run tests
         run: |
           cd myapp
           python -c "from app import app; print('✅ App imports OK')"
 
-  build:
+  security-scan:
     needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build image for scanning
+        run: docker build -t myapp:scan ./myapp
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'myapp:scan'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+          scanners: 'vuln'
+
+      - name: Trivy scan summary
+        run: echo "✅ Security scan complete!"
+
+  build:
+    needs: security-scan
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.build-image.outputs.image }}
@@ -72,3 +94,7 @@ jobs:
           echo "🚀 Deploying image: $IMAGE"
           echo "kubectl set image deployment/myapp myapp=$IMAGE"
           echo "✅ Deployment complete!"
+
+      - name: Notify success
+        if: success()
+        run: echo "✅ Full pipeline complete — test → scan → build → deploy!"

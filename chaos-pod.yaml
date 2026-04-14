@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chaos-liveness
+spec:
+  containers:
+  - name: chaos
+    image: busybox
+    command: ["/bin/sh"]
+    args:
+    - -c
+    - |
+      echo "Starting..."
+      sleep 10
+      echo "Simulating crash..."
+      exit 1
+    livenessProbe:
+      exec:
+        command: ["cat", "/tmp/healthy"]
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    resources:
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
